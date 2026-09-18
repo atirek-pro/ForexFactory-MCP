@@ -1,0 +1,10 @@
+Start MCP SERVER
+Run the following command in two different terminals
+
+1. python mcp_server.py
+2. ngrok http 8001
+
+Once run the above you will get the ngok link use that to update the MCP_SERVER_URL in the app.py
+
+START FASTAPI BACKEND
+1. uvicorn app:app --reload --port 8000
