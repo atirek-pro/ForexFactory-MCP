@@ -1,3 +1,4 @@
+import os
 from fastmcp import FastMCP
 # from fastmcp_tasks import TasksExtension
 from typing import Any, Dict, List
@@ -8,9 +9,208 @@ from phase_2 import (
     parse_calendar_html, 
     save_data 
 )
+import psycopg
+from dotenv import load_dotenv
+
+load_dotenv
+
+NEON_DATABASE_URL = os.environ["NEON_DATABASE_URL"]
 
 # Create the MCP server
 mcp = FastMCP("Forex Factory MCP")
+
+# DATABASE
+def get_db_connection():
+    """
+    Create a connection to the Neon PostgreSQL database.
+    """
+    return psycopg.connect(NEON_DATABASE_URL)
+
+def initialize_database():
+    """
+    Create the required database tables if they do not exist.
+    """
+
+    print("[DB] Connecting to Neon PostgreSQL...")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+
+            # ------------------------------------------------
+            # Phase 1 events
+            # ------------------------------------------------
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS forex_calendar_events (
+                    id SERIAL PRIMARY KEY,
+
+                    event_date TEXT,
+                    event_time TEXT,
+                    currency TEXT,
+                    impact TEXT,
+                    event TEXT,
+
+                    actual TEXT,
+                    forecast TEXT,
+                    previous TEXT,
+
+                    event_id TEXT,
+                    event_url TEXT,
+
+                    source TEXT NOT NULL DEFAULT 'phase_1',
+
+                    fetched_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+
+            # ------------------------------------------------
+            # Phase 2 events
+            # ------------------------------------------------
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS forex_event_details (
+                    id SERIAL PRIMARY KEY,
+
+                    event_date TEXT,
+                    event_time TEXT,
+                    currency TEXT,
+                    impact TEXT,
+                    event TEXT,
+
+                    actual TEXT,
+                    forecast TEXT,
+                    previous TEXT,
+
+                    event_id TEXT,
+                    event_url TEXT,
+
+                    source TEXT NOT NULL DEFAULT 'phase_2',
+
+                    fetched_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+
+        conn.commit()
+
+    print("[DB] Neon database initialized successfully.")
+
+# DATABASE INSERT HELPERS
+def save_phase1_events(events: List[Dict[str, Any]]):
+    """
+    Persist Phase 1 calendar events into Neon.
+    """
+
+    if not events:
+        print("[DB] No Phase 1 events to store.")
+        return
+
+    print(f"[DB] Persisting {len(events)} Phase 1 events...")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+
+            for event in events:
+
+                cur.execute(
+                    """
+                    INSERT INTO forex_calendar_events (
+                        event_date,
+                        event_time,
+                        currency,
+                        impact,
+                        event,
+                        actual,
+                        forecast,
+                        previous,
+                        event_id,
+                        event_url
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s
+                    );
+                    """,
+                    (
+                        event.get("date"),
+                        event.get("time"),
+                        event.get("currency"),
+                        event.get("impact"),
+                        event.get("event"),
+                        event.get("actual"),
+                        event.get("forecast"),
+                        event.get("previous"),
+                        event.get("event_id"),
+                        event.get("event_url"),
+                    ),
+                )
+
+        conn.commit()
+
+    print(
+        f"[DB] Successfully stored "
+        f"{len(events)} Phase 1 events."
+    )
+
+
+def save_phase2_events(events: List[Dict[str, Any]]):
+    """
+    Persist Phase 2 detailed events into Neon.
+    """
+
+    if not events:
+        print("[DB] No Phase 2 events to store.")
+        return
+
+    print(f"[DB] Persisting {len(events)} Phase 2 events...")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+
+            for event in events:
+
+                cur.execute(
+                    """
+                    INSERT INTO forex_event_details (
+                        event_date,
+                        event_time,
+                        currency,
+                        impact,
+                        event,
+                        actual,
+                        forecast,
+                        previous,
+                        event_id,
+                        event_url
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s
+                    );
+                    """,
+                    (
+                        event.get("date"),
+                        event.get("time"),
+                        event.get("currency"),
+                        event.get("impact"),
+                        event.get("event"),
+                        event.get("actual"),
+                        event.get("forecast"),
+                        event.get("previous"),
+                        event.get("event_id"),
+                        event.get("event_url"),
+                    ),
+                )
+
+        conn.commit()
+
+    print(
+        f"[DB] Successfully stored "
+        f"{len(events)} Phase 2 events."
+    )
 
 # Enable MCP background task support 
 # mcp.add_extension(TasksExtension())
@@ -73,6 +273,27 @@ async def get_forex_event_details() -> List[Dict[str, Any]]:
 
 # SERVER
 if __name__ == "__main__":
+
+    print("\n" + "=" * 70)
+    print("STARTING FOREX FACTORY MCP SERVER")
+    print("=" * 70)
+
+    print("[SERVER] Initializing Neon database...")
+
+    initialize_database()
+
+    print("[SERVER] MCP tools:")
+    print("  - get_forex_calendar")
+    print("  - get_forex_event_details")
+
+    print("[SERVER] Transport: HTTP")
+    print("[SERVER] Host: 127.0.0.1")
+    print("[SERVER] Port: 8001")
+
+    print("=" * 70)
+    print("🔥 MCP SERVER READY")
+    print("=" * 70 + "\n")
+
     mcp.run(
         transport="http",
         host="127.0.0.1",
